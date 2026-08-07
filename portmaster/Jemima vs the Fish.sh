@@ -32,10 +32,13 @@ cd "$GAMEDIR" || exit 1
 export XDG_DATA_HOME="$CONFDIR"
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
 
+# LÖVE 11.5 is part of PortMaster's base files rather than one of the
+# squashfs runtimes shown in Runtime Manager, so it may not appear there.
 LOVE_RUNTIME="$controlfolder/runtimes/love_11.5/love.txt"
 if [ ! -f "$LOVE_RUNTIME" ]; then
-  echo "Love2D 11.5 PortMaster runtime is not installed."
-  echo "Install the love_11.5 runtime (or Full PortMaster) and try again."
+  echo "PortMaster's bundled LÖVE 11.5 runtime was not found:"
+  echo "$LOVE_RUNTIME"
+  echo "Update or reinstall the normal PortMaster package, then try again."
   exit 1
 fi
 
