@@ -1,15 +1,21 @@
 local GAME_W, GAME_H = 640, 480
-local TURN_LIMIT = 12 -- temporary tuning value; not yet a final design decision
+local TURN_LIMIT = 12 -- temporary tuning value
 local ROUTE_LEN = 4
 local MIN_NODES, MAX_NODES = 25, 30
 
+-- Miyoo Flip face buttons: X top/cyan, Y left/green, A right/pink, B bottom/yellow.
 local BUTTONS = { "a", "b", "x", "y" }
 local BUTTON_COLOURS = {
-    a = { 0.20, 0.85, 0.35 },
-    b = { 0.95, 0.25, 0.25 },
-    x = { 0.25, 0.55, 1.00 },
-    y = { 1.00, 0.82, 0.20 },
+    x = { 0.27, 0.72, 0.86 },
+    y = { 0.61, 0.80, 0.36 },
+    a = { 0.88, 0.56, 0.69 },
+    b = { 0.88, 0.78, 0.30 },
 }
+
+local MOVE_TIME = 0.42
+local NODE_HOLD = 0.14
+local BRIEF_HOLD = 0.75
+local FULL_HOLD = 0.85
 
 local graph
 local phase
@@ -22,13 +28,18 @@ local pounceNode
 local cursor = { x = GAME_W / 2, y = GAME_H / 2 }
 local selectedNode
 local currentTurn
-local revealStep
-local revealTimer
-local revealFishNode
 local resultText
 local resultKind
 local controller
 local fontSmall, fontNormal, fontLarge
+
+-- Reveal/animation state.
+local revealSegment
+local revealProgress
+local revealState
+local revealHold
+local revealEvent
+local briefCaught
 
 local function copyArray(t)
     local out = {}
@@ -175,9 +186,7 @@ local function connectSpanningTree(g)
             end
         end
 
-        if not bestA or not addEdge(g, bestA, bestB) then
-            return false
-        end
+        if not bestA or not addEdge(g, bestA, bestB) then return false end
         connected[bestB] = true
         connectedCount = connectedCount + 1
     end
@@ -292,9 +301,7 @@ end
 
 local function activeMove(fromNode, button)
     local to = graph.nodes[fromNode].moves[button]
-    if to and graph.nodes[to].status == "active" then
-        return to
-    end
+    if to and graph.nodes[to].status == "active" then return to end
     return nil
 end
 
@@ -354,6 +361,7 @@ local function startFishTurn()
     selectedNode = nil
     resultText = nil
     resultKind = nil
+    revealEvent = nil
 end
 
 local function newGame()
@@ -368,7 +376,7 @@ local function finishTurnResolution()
     local finalNode = routeNodes[ROUTE_LEN + 1]
     fishNode = finalNode
 
-    -- Full catch always has priority, even if this node was visited earlier.
+    -- Full catch always wins, even if the pounce node appeared earlier in the route.
     if pounceNode == finalNode then
         resultKind = "full"
         resultText = "FULL CATCH! Jemima wins."
@@ -376,18 +384,10 @@ local function finishTurnResolution()
         return
     end
 
-    local brief = false
-    for i = 2, ROUTE_LEN do -- only the three intermediate nodes
-        if routeNodes[i] == pounceNode then
-            brief = true
-            break
-        end
-    end
-
-    if brief then
+    if briefCaught then
         resultKind = "brief"
         resultText = "BRIEF CATCH! That node is destroyed."
-        destroyNode(pounceNode) -- destruction happens only after all four route steps
+        destroyNode(pounceNode) -- only after all four moves have finished
 
         if degree(graph, fishNode, true) == 0 then
             resultKind = "stalemate"
@@ -414,9 +414,13 @@ local function confirmJemimaPounce()
     if not selectedNode then return end
     pounceNode = selectedNode
     phase = "reveal"
-    revealStep = 0
-    revealTimer = 0
-    revealFishNode = fishTurnStart
+    revealSegment = 1
+    revealProgress = 0
+    revealState = "moving"
+    revealHold = 0
+    revealEvent = nil
+    briefCaught = false
+    fishNode = fishTurnStart
 end
 
 local function inputFishButton(button)
@@ -435,6 +439,38 @@ local function inputFishButton(button)
     end
 end
 
+local function arriveAtRevealNode()
+    fishNode = routeNodes[revealSegment + 1]
+    revealProgress = 1
+    revealState = "holding"
+    revealEvent = nil
+
+    if fishNode == pounceNode then
+        if revealSegment == ROUTE_LEN then
+            revealEvent = "full"
+            revealHold = FULL_HOLD
+        else
+            revealEvent = "brief"
+            briefCaught = true
+            revealHold = BRIEF_HOLD
+        end
+    else
+        revealHold = NODE_HOLD
+    end
+end
+
+local function advanceReveal()
+    revealEvent = nil
+    if revealSegment >= ROUTE_LEN then
+        finishTurnResolution()
+        return
+    end
+
+    revealSegment = revealSegment + 1
+    revealProgress = 0
+    revealState = "moving"
+end
+
 local function getScale()
     local w, h = love.graphics.getDimensions()
     local s = math.min(w / GAME_W, h / GAME_H)
@@ -447,15 +483,30 @@ local function setColour(c, alpha)
     love.graphics.setColor(c[1], c[2], c[3], alpha or 1)
 end
 
+local function fishDrawPosition()
+    if phase ~= "reveal" then
+        local nodeIndex = fishNode
+        if phase == "fish" or phase == "jemima" then nodeIndex = fishTurnStart end
+        local n = graph.nodes[nodeIndex]
+        return n.x, n.y
+    end
+
+    local from = graph.nodes[routeNodes[revealSegment]]
+    local to = graph.nodes[routeNodes[revealSegment + 1]]
+    if revealState == "holding" then return to.x, to.y end
+
+    local t = math.max(0, math.min(1, revealProgress))
+    -- Smoothstep: starts and stops cleanly at nodes.
+    t = t * t * (3 - 2 * t)
+    return from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t
+end
+
 local function drawEdge(e)
     local a, b = graph.nodes[e.a], graph.nodes[e.b]
     local active = a.status == "active" and b.status == "active"
 
     if active then
         local mx, my = (a.x + b.x) / 2, (a.y + b.y) / 2
-
-        -- Every connection is exactly two colours: the half touching each
-        -- node tells the Fish which face button selects that path there.
         love.graphics.setLineWidth(7)
         love.graphics.setColor(0.03, 0.04, 0.05, 0.95)
         love.graphics.line(a.x, a.y, b.x, b.y)
@@ -502,33 +553,36 @@ local function drawRouteTrail()
     if phase ~= "reveal" and phase ~= "gameover" and phase ~= "result" then return end
     if not routeNodes or #routeNodes < 2 then return end
 
-    local maxSegment = math.min(revealStep or ROUTE_LEN, ROUTE_LEN)
-    if phase == "result" or phase == "gameover" then maxSegment = ROUTE_LEN end
-
-    love.graphics.setColor(0.20, 0.90, 0.90, 0.45)
+    love.graphics.setColor(0.20, 0.78, 0.92, 0.38)
     love.graphics.setLineWidth(3)
-    for step = 1, maxSegment do
+
+    if phase == "result" or phase == "gameover" then
+        for step = 1, ROUTE_LEN do
+            local a = graph.nodes[routeNodes[step]]
+            local b = graph.nodes[routeNodes[step + 1]]
+            love.graphics.line(a.x, a.y, b.x, b.y)
+        end
+        return
+    end
+
+    for step = 1, revealSegment - 1 do
         local a = graph.nodes[routeNodes[step]]
         local b = graph.nodes[routeNodes[step + 1]]
         love.graphics.line(a.x, a.y, b.x, b.y)
     end
+
+    local a = graph.nodes[routeNodes[revealSegment]]
+    local fx, fy = fishDrawPosition()
+    love.graphics.line(a.x, a.y, fx, fy)
 end
 
 local function drawFishMarker()
-    local nodeIndex
-    if phase == "reveal" then
-        nodeIndex = revealFishNode
-    else
-        nodeIndex = fishNode
-    end
-    if phase == "fish" or phase == "jemima" then
-        nodeIndex = fishTurnStart
-    end
-    if not nodeIndex then return end
-
-    local n = graph.nodes[nodeIndex]
-    love.graphics.setColor(0.15, 0.85, 0.92, 1)
-    love.graphics.circle("fill", n.x, n.y, 5)
+    local x, y = fishDrawPosition()
+    love.graphics.setColor(0.15, 0.78, 0.96, 1)
+    love.graphics.circle("fill", x, y, 7)
+    love.graphics.setColor(0.75, 0.94, 1.00, 0.95)
+    love.graphics.setLineWidth(2)
+    love.graphics.circle("line", x, y, 10)
 end
 
 local function drawPounce()
@@ -539,6 +593,25 @@ local function drawPounce()
     love.graphics.circle("line", n.x, n.y, 15)
     love.graphics.line(n.x - 10, n.y, n.x + 10, n.y)
     love.graphics.line(n.x, n.y - 10, n.x, n.y + 10)
+end
+
+local function drawStrikeEvent()
+    if phase ~= "reveal" or not revealEvent or not pounceNode then return end
+    local n = graph.nodes[pounceNode]
+    local pulse = 18 + 3 * math.sin(love.timer.getTime() * 14)
+
+    if revealEvent == "brief" then
+        love.graphics.setColor(1.00, 0.62, 0.25, 0.95)
+    else
+        love.graphics.setColor(1.00, 0.35, 0.72, 1)
+    end
+    love.graphics.setLineWidth(4)
+    love.graphics.circle("line", n.x, n.y, pulse)
+
+    love.graphics.setFont(fontSmall)
+    love.graphics.setColor(1, 1, 1, 1)
+    local label = (revealEvent == "brief") and "BRIEF CATCH!" or "FULL CATCH!"
+    love.graphics.printf(label, n.x - 65, n.y - 34, 130, "center")
 end
 
 local function drawJemimaCursor()
@@ -555,20 +628,45 @@ local function drawJemimaCursor()
     love.graphics.circle("line", cursor.x, cursor.y, 4)
 end
 
+local function drawHiddenInputMeter()
+    if phase ~= "fish" then return end
+
+    love.graphics.setFont(fontSmall)
+    love.graphics.setColor(0.72, 0.76, 0.80, 1)
+    love.graphics.print("HIDDEN ROUTE", 234, 41)
+
+    local x, y = 320, 43
+    local w, h, gap = 34, 9, 7
+    for i = 1, ROUTE_LEN do
+        love.graphics.setLineWidth(1)
+        love.graphics.setColor(0.55, 0.60, 0.64, 0.75)
+        love.graphics.rectangle("line", x + (i - 1) * (w + gap), y, w, h, 2, 2)
+        if i <= #routeButtons then
+            love.graphics.setColor(0.78, 0.90, 0.96, 0.95)
+            love.graphics.rectangle("fill", x + 2 + (i - 1) * (w + gap), y + 2, w - 4, h - 4, 1, 1)
+        end
+    end
+end
+
+local function drawButtonFace(button, x, y)
+    setColour(BUTTON_COLOURS[button])
+    love.graphics.circle("fill", x, y, 9)
+    love.graphics.setColor(0.08, 0.09, 0.10, 0.95)
+    love.graphics.setFont(fontSmall)
+    love.graphics.printf(string.upper(button), x - 9, y - 6, 18, "center")
+end
+
 local function drawButtonLegend()
     love.graphics.setFont(fontSmall)
-    local x = 404
-    local y = 448
-    love.graphics.setColor(0.8, 0.82, 0.84, 1)
-    love.graphics.print("PATH COLOURS:", x, y)
-    x = x + 88
-    for _, button in ipairs(BUTTONS) do
-        setColour(BUTTON_COLOURS[button])
-        love.graphics.circle("fill", x, y + 6, 5)
-        love.graphics.setColor(0.92, 0.92, 0.92, 1)
-        love.graphics.print(string.upper(button), x + 8, y)
-        x = x + 34
-    end
+    love.graphics.setColor(0.62, 0.66, 0.70, 1)
+    love.graphics.print("MIYOO FLIP", 535, 414)
+
+    -- Physical face-button arrangement on the Miyoo Flip.
+    local cx, cy = 575, 447
+    drawButtonFace("x", cx, cy - 16)
+    drawButtonFace("y", cx - 18, cy)
+    drawButtonFace("a", cx + 18, cy)
+    drawButtonFace("b", cx, cy + 16)
 end
 
 local function drawHud()
@@ -582,19 +680,20 @@ local function drawHud()
 
     local message
     if phase == "fish" then
-        message = "FISH: secretly enter 4 valid A/B/X/Y moves. The route stays hidden."
+        message = "FISH: secretly enter 4 valid face-button moves."
     elseif phase == "jemima" then
-        message = "JEMIMA: move the cursor with D-pad/arrows. A/Enter pounces on the highlighted node."
+        message = "JEMIMA: move cursor with D-pad/stick. A pounces on highlighted node."
     elseif phase == "reveal" then
-        message = "REVEAL: route resolving..."
+        message = "REVEAL: watch the Fish move one step at a time."
     elseif phase == "result" then
-        message = resultText .. "  Press A/Enter for the next turn."
+        message = resultText .. "  Press A for next turn."
     elseif phase == "gameover" then
-        message = resultText .. "  Press Start/Enter for a new random map."
+        message = resultText .. "  Press Start/A for a new map."
     end
 
     love.graphics.setColor(0.84, 0.86, 0.88, 1)
-    love.graphics.printf(message or "", 18, 420, 604, "left")
+    love.graphics.printf(message or "", 18, 420, 485, "left")
+    drawHiddenInputMeter()
     drawButtonLegend()
 end
 
@@ -640,16 +739,12 @@ function love.update(dt)
             selectedNode = nearestActiveNode(cursor.x, cursor.y)
         end
     elseif phase == "reveal" then
-        revealTimer = revealTimer + dt
-        if revealTimer >= 0.55 then
-            revealTimer = revealTimer - 0.55
-            if revealStep < ROUTE_LEN then
-                revealStep = revealStep + 1
-                revealFishNode = routeNodes[revealStep + 1]
-                if revealStep == ROUTE_LEN then
-                    finishTurnResolution()
-                end
-            end
+        if revealState == "moving" then
+            revealProgress = revealProgress + dt / MOVE_TIME
+            if revealProgress >= 1 then arriveAtRevealNode() end
+        elseif revealState == "holding" then
+            revealHold = revealHold - dt
+            if revealHold <= 0 then advanceReveal() end
         end
     end
 end
@@ -709,8 +804,9 @@ function love.draw()
     for _, e in ipairs(graph.edges) do drawEdge(e) end
     drawRouteTrail()
     for i, node in ipairs(graph.nodes) do drawNode(i, node) end
-    drawFishMarker()
     drawPounce()
+    drawFishMarker()
+    drawStrikeEvent()
     drawJemimaCursor()
     drawHud()
 
