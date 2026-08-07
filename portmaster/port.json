@@ -1,0 +1,33 @@
+{
+  "version": 4,
+  "name": "jemima_vs_the_fish.zip",
+  "items": [
+    "Jemima vs the Fish.sh",
+    "jemima_vs_the_fish"
+  ],
+  "items_opt": [],
+  "attr": {
+    "title": "Jemima vs the Fish",
+    "porter": [
+      "dj2105"
+    ],
+    "desc": "Barebones two-player strategy prototype. The Fish secretly enters a four-move route through a random node network; Jemima chooses a pounce node to contain and eventually catch it.",
+    "desc_md": null,
+    "inst": "Ready to run with a current PortMaster installation.",
+    "inst_md": null,
+    "genres": [
+      "strategy"
+    ],
+    "image": null,
+    "rtr": true,
+    "exp": true,
+    "runtime": [],
+    "store": [],
+    "availability": "full",
+    "reqs": [],
+    "arch": [
+      "aarch64"
+    ],
+    "min_glibc": ""
+  }
+}
