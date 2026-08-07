@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STAGE="$ROOT/build/knulli-package"
-ZIPFILE="$ROOT/build/jemima-vs-the-fish-knulli.zip"
+STAGE="$ROOT/build/portmaster-package"
+ZIPFILE="$ROOT/build/jemima_vs_the_fish.zip"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/jemima_vs_the_fish/lovegame"
@@ -11,28 +11,9 @@ mkdir -p "$ROOT/build"
 
 cp "$ROOT/main.lua" "$STAGE/jemima_vs_the_fish/lovegame/main.lua"
 cp "$ROOT/conf.lua" "$STAGE/jemima_vs_the_fish/lovegame/conf.lua"
+cp "$ROOT/portmaster/port.json" "$STAGE/jemima_vs_the_fish/port.json"
+cp "$ROOT/portmaster/gameinfo.xml" "$STAGE/jemima_vs_the_fish/gameinfo.xml"
 cp "$ROOT/portmaster/Jemima vs the Fish.sh" "$STAGE/Jemima vs the Fish.sh"
-
-cat > "$STAGE/INSTALL.txt" <<'EOF'
-JEMIMA VS THE FISH - KNULLI TEST PACKAGE
-
-1. Make sure PortMaster is installed on KNULLI.
-2. Make sure the PortMaster love_11.5 runtime is installed.
-3. Extract this ZIP directly into:
-      /userdata/roms/ports/
-
-After extraction you should have:
-
-/userdata/roms/ports/Jemima vs the Fish.sh
-/userdata/roms/ports/jemima_vs_the_fish/lovegame/main.lua
-/userdata/roms/ports/jemima_vs_the_fish/lovegame/conf.lua
-
-4. Refresh the KNULLI game list / restart EmulationStation.
-5. Launch "Jemima vs the Fish" from Ports.
-
-If it fails to launch, inspect:
-/userdata/roms/ports/jemima_vs_the_fish/log.txt
-EOF
 
 python3 - "$STAGE" "$ZIPFILE" <<'PY'
 import os
@@ -49,4 +30,7 @@ with zipfile.ZipFile(outfile, "w", zipfile.ZIP_DEFLATED) as zf:
 print(outfile)
 PY
 
-echo "Built: $ZIPFILE"
+echo
+printf 'Built PortMaster autoinstall package:\n  %s\n' "$ZIPFILE"
+printf '\nFor KNULLI copy the ZIP, without extracting it, to:\n  /userdata/system/.local/share/PortMaster/autoinstall/\n'
+printf '\nThen launch PortMaster. It should detect and install the ZIP automatically.\n'
