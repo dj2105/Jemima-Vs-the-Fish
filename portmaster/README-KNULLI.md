@@ -1,36 +1,51 @@
 # KNULLI / PortMaster test package
 
-This directory contains the launcher used by the barebones LÖVE prototype.
+This directory contains the PortMaster launcher and metadata for the barebones LÖVE prototype.
 
-Build the copy-ready ZIP from the repository root:
+## Build
+
+From the repository root:
 
 ```sh
 bash scripts/build_knulli_package.sh
 ```
 
-The script creates:
+This now creates a PortMaster-style autoinstall package:
 
 ```text
-build/jemima-vs-the-fish-knulli.zip
+build/jemima_vs_the_fish.zip
 ```
 
-Extract that ZIP directly into:
+## Install on KNULLI
+
+Copy the ZIP **without extracting it** to:
 
 ```text
-/userdata/roms/ports/
+/userdata/system/.local/share/PortMaster/autoinstall/
 ```
 
-Required installed components:
+Then launch PortMaster. PortMaster should detect the ZIP and install the launcher plus game directory into the correct Ports location.
 
-- PortMaster
-- PortMaster `love_11.5` runtime
+The package includes a PortMaster `port.json` and `gameinfo.xml` rather than relying on manual extraction.
 
-After extraction, refresh/restart KNULLI's game list and launch **Jemima vs the Fish** from Ports.
+## About LÖVE 11.5
 
-If it fails to launch, inspect:
+PortMaster's LÖVE 11.5 files live under:
+
+```text
+PortMaster/runtimes/love_11.5/
+```
+
+They are bundled PortMaster files and are not one of the squashfs runtimes shown in Runtime Manager, so it is normal for `love_11.5` not to appear in that list.
+
+If Jemima fails to launch because `love_11.5/love.txt` is missing, update or reinstall the normal PortMaster package rather than downloading every Runtime Manager item.
+
+## Troubleshooting
+
+After installation, launch **Jemima vs the Fish** from Ports. If it fails, inspect:
 
 ```text
 /userdata/roms/ports/jemima_vs_the_fish/log.txt
 ```
 
-This is a local testing package rather than a finished PortMaster catalogue submission.
+This remains a local gameplay-testing package rather than a finished PortMaster catalogue submission.
