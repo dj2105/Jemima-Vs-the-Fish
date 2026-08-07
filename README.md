@@ -59,6 +59,44 @@ love .
 
 No external graphics or audio assets are required.
 
+## Build the KNULLI test package
+
+The branch includes a PortMaster launcher based on the current PortMaster Love2D 11.5 launch template.
+
+From the repository root:
+
+```sh
+bash scripts/build_knulli_package.sh
+```
+
+This creates:
+
+```text
+build/jemima-vs-the-fish-knulli.zip
+```
+
+Extract that ZIP directly into KNULLI's Ports directory:
+
+```text
+/userdata/roms/ports/
+```
+
+The resulting layout should be:
+
+```text
+/userdata/roms/ports/Jemima vs the Fish.sh
+/userdata/roms/ports/jemima_vs_the_fish/lovegame/main.lua
+/userdata/roms/ports/jemima_vs_the_fish/lovegame/conf.lua
+```
+
+PortMaster and its **love_11.5** runtime must already be installed. If the port fails to launch, check:
+
+```text
+/userdata/roms/ports/jemima_vs_the_fish/log.txt
+```
+
+This is a local test package, not yet a submission-ready PortMaster release with store metadata/screenshots.
+
 ## Prototype presentation
 
 Everything is drawn procedurally for now:
@@ -70,4 +108,4 @@ Everything is drawn procedurally for now:
 - pink target = Jemima's pounce
 - two-colour path halves = local A/B/X/Y controls
 
-The goal of this branch is to test whether the **prediction, containment, node destruction and blind route input** are fun before building the proper visual treatment and PortMaster package.
+The goal of this branch is to test whether the **prediction, containment, node destruction and blind route input** are fun before building the proper visual treatment and a full PortMaster release.
